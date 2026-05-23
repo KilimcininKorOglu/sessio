@@ -128,6 +128,41 @@ fn detects_and_imports_current_claude_fixture() {
 }
 
 #[test]
+fn detects_and_imports_droid_fixture() {
+    let path = fixture("droid_sample.jsonl");
+    let format = detect_format(&path).unwrap();
+    assert_eq!(format, SessionFormat::Droid);
+
+    let session = load_session(&path, SourceFormat::Auto).unwrap();
+    assert_eq!(
+        session.metadata.session_id,
+        "11111111-1111-4111-8111-111111111111"
+    );
+    assert_eq!(
+        session.metadata.cwd.as_deref(),
+        Some(std::path::Path::new("/tmp/transession-droid"))
+    );
+    assert!(
+        session
+            .events
+            .iter()
+            .any(|event| matches!(event, SessionEvent::Reasoning(_)))
+    );
+    assert!(
+        session
+            .events
+            .iter()
+            .any(|event| matches!(event, SessionEvent::ToolCall(_)))
+    );
+    assert!(
+        session
+            .events
+            .iter()
+            .any(|event| matches!(event, SessionEvent::ToolResult(_)))
+    );
+}
+
+#[test]
 fn materializes_canonical_codex_layout() {
     let session = load_session(&fixture("claude_sample.jsonl"), SourceFormat::Claude).unwrap();
     let temp = tempdir().unwrap();
@@ -182,6 +217,30 @@ fn materializes_canonical_codex_layout() {
     assert_eq!(id, session.metadata.session_id);
     assert_eq!(title, id);
     assert!(first_user_message.contains("continuous-codex.sh"));
+}
+
+#[test]
+fn materializes_canonical_droid_layout() {
+    let session = load_session(&fixture("claude_sample.jsonl"), SourceFormat::Claude).unwrap();
+    let temp = tempdir().unwrap();
+    let path = materialize(&session, SessionFormat::Droid, temp.path()).unwrap();
+
+    assert!(path.exists());
+    assert!(path.to_string_lossy().contains("/sessions/"));
+    assert!(
+        path.with_extension("settings.json")
+            .to_string_lossy()
+            .contains(".settings.json")
+    );
+    assert!(path.with_extension("settings.json").exists());
+
+    let text = fs::read_to_string(path).unwrap();
+    let first_line: serde_json::Value = serde_json::from_str(text.lines().next().unwrap()).unwrap();
+    assert_eq!(
+        first_line.get("type").and_then(|value| value.as_str()),
+        Some("session_start")
+    );
+    assert!(text.contains("\"type\":\"message\""));
 }
 
 #[test]
@@ -481,6 +540,27 @@ fn resolves_claude_session_ids_from_claude_config_dir_root() {
 }
 
 #[test]
+fn resolves_droid_session_ids_from_default_store_roots() {
+    let session = load_session(&fixture("droid_sample.jsonl"), SourceFormat::Droid).unwrap();
+    let temp = tempdir().unwrap();
+    materialize(&session, SessionFormat::Droid, temp.path()).unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_transession"))
+        .arg("inspect")
+        .arg("11111111-1111-4111-8111-111111111111")
+        .arg("--from")
+        .arg("droid")
+        .arg("--json")
+        .env("TRANSESSION_DROID_HOME", temp.path())
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("\"detected_format\": \"droid\""));
+}
+
+#[test]
 fn quick_cli_converts_by_session_id_and_prints_resume_hint() {
     let source_session =
         load_session(&fixture("claude_sample.jsonl"), SourceFormat::Claude).unwrap();
@@ -504,6 +584,53 @@ fn quick_cli_converts_by_session_id_and_prints_resume_hint() {
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert!(stdout.contains("created codex session:"));
     assert!(stdout.contains("resume with: codex resume "));
+}
+
+#[test]
+fn quick_cli_opens_droid_target_by_default() {
+    let mut source_session =
+        load_session(&fixture("claude_sample.jsonl"), SourceFormat::Claude).unwrap();
+    let source_home = tempdir().unwrap();
+    let target_home = tempdir().unwrap();
+    source_session.metadata.cwd = Some(target_home.path().join("missing-session-cwd"));
+    materialize(&source_session, SessionFormat::Claude, source_home.path()).unwrap();
+
+    let log_path = target_home.path().join("launcher.log");
+    let script_path = target_home.path().join("fake-droid.sh");
+    fs::write(
+        &script_path,
+        format!(
+            "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"{}\"\nprintf 'FACTORY_HOME=%s\\n' \"$FACTORY_HOME\" >> \"{}\"\nprintf 'DROID_HOME=%s\\n' \"$DROID_HOME\" >> \"{}\"\n",
+            log_path.display(),
+            log_path.display(),
+            log_path.display()
+        ),
+    )
+    .unwrap();
+    let mut permissions = fs::metadata(&script_path).unwrap().permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&script_path, permissions).unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_transession"))
+        .arg("--from")
+        .arg("claude")
+        .arg("--to")
+        .arg("droid")
+        .arg("--keep-session-id")
+        .arg("d89e26cd-11f2-47e8-bea5-a73ad5458483")
+        .arg("--output")
+        .arg(target_home.path())
+        .env("TRANSESSION_CLAUDE_HOME", source_home.path())
+        .env("TRANSESSION_DROID_BIN", &script_path)
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let log = fs::read_to_string(log_path).unwrap();
+    assert!(log.contains("-r"));
+    assert!(log.contains("d89e26cd-11f2-47e8-bea5-a73ad5458483"));
+    assert!(log.contains("FACTORY_HOME="));
+    assert!(log.contains("DROID_HOME="));
 }
 
 #[test]

@@ -1119,5 +1119,6 @@ fn format_name(format: SessionFormat) -> &'static str {
         SessionFormat::Ir => "IR",
         SessionFormat::Codex => "Codex",
         SessionFormat::Claude => "Claude",
+        SessionFormat::Droid => "Droid",
     }
 }

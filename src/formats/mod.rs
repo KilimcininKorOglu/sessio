@@ -1,5 +1,6 @@
 mod claude;
 mod codex;
+mod droid;
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -11,6 +12,7 @@ use crate::ir::{SessionFormat, SourceFormat, UniversalSession};
 
 pub use claude::ClaudeMaterialization;
 pub use codex::CodexMaterialization;
+pub use droid::DroidMaterialization;
 
 #[derive(Debug)]
 pub struct ResolvedInput {
@@ -56,6 +58,13 @@ pub fn detect_format(path: &Path) -> Result<SessionFormat> {
         return Ok(SessionFormat::Claude);
     }
 
+    if matches!(
+        value.get("type").and_then(Value::as_str),
+        Some("session_start")
+    ) {
+        return Ok(SessionFormat::Droid);
+    }
+
     bail!("could not detect format for {}", path.display())
 }
 
@@ -92,23 +101,34 @@ pub fn resolve_input(path: &Path, format: SourceFormat) -> Result<ResolvedInput>
                 format: SessionFormat::Claude,
             })
         }
+        Some(SessionFormat::Droid) => {
+            resolve_droid_session_id(&session_id).map(|path| ResolvedInput {
+                path,
+                format: SessionFormat::Droid,
+            })
+        }
         None => {
             let codex = resolve_codex_session_id(&session_id).ok();
             let claude = resolve_claude_session_id(&session_id).ok();
-            match (codex, claude) {
-                (Some(path), None) => Ok(ResolvedInput {
+            let droid = resolve_droid_session_id(&session_id).ok();
+            match (codex, claude, droid) {
+                (Some(path), None, None) => Ok(ResolvedInput {
                     path,
                     format: SessionFormat::Codex,
                 }),
-                (None, Some(path)) => Ok(ResolvedInput {
+                (None, Some(path), None) => Ok(ResolvedInput {
                     path,
                     format: SessionFormat::Claude,
                 }),
-                (Some(_), Some(_)) => bail!(
-                    "session id {session_id} exists in both Codex and Claude stores; specify --from"
+                (None, None, Some(path)) => Ok(ResolvedInput {
+                    path,
+                    format: SessionFormat::Droid,
+                }),
+                (None, None, None) => bail!(
+                    "could not resolve {session_id} as a path or native session id in the default Codex/Claude/Droid stores"
                 ),
-                (None, None) => bail!(
-                    "could not resolve {session_id} as a path or native session id in the default Codex/Claude stores"
+                _ => bail!(
+                    "session id {session_id} exists in multiple native stores; specify --from"
                 ),
             }
         }
@@ -121,6 +141,7 @@ pub fn load_session(path: &Path, format: SourceFormat) -> Result<UniversalSessio
         SessionFormat::Ir => load_ir(&resolved.path),
         SessionFormat::Codex => codex::load(&resolved.path),
         SessionFormat::Claude => claude::load(&resolved.path),
+        SessionFormat::Droid => droid::load(&resolved.path),
     }
 }
 
@@ -153,6 +174,7 @@ pub fn materialize(
         }
         SessionFormat::Codex => codex::write(session, output),
         SessionFormat::Claude => claude::write(session, output),
+        SessionFormat::Droid => droid::write(session, output),
     }
 }
 
@@ -160,6 +182,7 @@ pub fn default_output_root(target: SessionFormat) -> Result<PathBuf> {
     match target {
         SessionFormat::Codex => codex_root(),
         SessionFormat::Claude => claude_root(),
+        SessionFormat::Droid => droid_root(),
         SessionFormat::Ir => bail!("IR output requires an explicit file path"),
     }
 }
@@ -198,6 +221,23 @@ fn resolve_claude_session_id(session_id: &str) -> Result<PathBuf> {
     })
 }
 
+fn resolve_droid_session_id(session_id: &str) -> Result<PathBuf> {
+    let root = droid_root()?;
+    let sessions_root = root.join("sessions");
+    find_in_tree(&sessions_root, |path| {
+        path.file_name()
+            .and_then(|name| name.to_str())
+            .map(|name| name == format!("{session_id}.jsonl"))
+            .unwrap_or(false)
+    })
+    .with_context(|| {
+        format!(
+            "could not find Droid session {session_id} under {}",
+            sessions_root.display()
+        )
+    })
+}
+
 fn codex_root() -> Result<PathBuf> {
     discover_root("TRANSESSION_CODEX_HOME", &["CODEX_HOME"], ".codex")
 }
@@ -207,6 +247,14 @@ fn claude_root() -> Result<PathBuf> {
         "TRANSESSION_CLAUDE_HOME",
         &["CLAUDE_CONFIG_DIR", "CLAUDE_HOME"],
         ".claude",
+    )
+}
+
+fn droid_root() -> Result<PathBuf> {
+    discover_root(
+        "TRANSESSION_DROID_HOME",
+        &["DROID_HOME", "FACTORY_HOME"],
+        ".factory",
     )
 }
 

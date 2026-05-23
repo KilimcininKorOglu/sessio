@@ -19,7 +19,7 @@ use crate::ir::{SessionEvent, SessionFormat, SourceFormat, UniversalSession};
     about = "Translate session storage between Codex, Claude, and a universal IR",
     args_conflicts_with_subcommands = true,
     subcommand_negates_reqs = true,
-    after_help = "Quick usage:\n  transession --from claude --to codex <SESSION_ID>\n  transession --from codex --to claude <SESSION_ID>\n  transession --from claude --to codex <SESSION_ID> --no-open\n\nAdvanced usage remains available through subcommands such as inspect/import/export/convert."
+    after_help = "Quick usage:\n  transession --from claude --to codex <SESSION_ID>\n  transession --from codex --to droid <SESSION_ID>\n  transession --from droid --to claude <SESSION_ID>\n  transession --from claude --to codex <SESSION_ID> --no-open\n\nAdvanced usage remains available through subcommands such as inspect/import/export/convert."
 )]
 struct Cli {
     #[command(subcommand)]
@@ -232,13 +232,17 @@ fn maybe_rekey_session(
         {
             session.metadata.session_id = Uuid::new_v4().to_string();
         }
+        if target == SessionFormat::Droid && Uuid::parse_str(&session.metadata.session_id).is_err()
+        {
+            session.metadata.session_id = Uuid::new_v4().to_string();
+        }
         return;
     }
 
     session.metadata.session_id = match target {
         SessionFormat::Ir => Uuid::new_v4().to_string(),
         SessionFormat::Codex => Uuid::now_v7().to_string(),
-        SessionFormat::Claude => Uuid::new_v4().to_string(),
+        SessionFormat::Claude | SessionFormat::Droid => Uuid::new_v4().to_string(),
     };
 }
 
@@ -247,6 +251,7 @@ fn format_name(format: SessionFormat) -> &'static str {
         SessionFormat::Ir => "ir",
         SessionFormat::Codex => "codex",
         SessionFormat::Claude => "claude",
+        SessionFormat::Droid => "droid",
     }
 }
 
@@ -254,6 +259,7 @@ fn resume_hint(format: SessionFormat, session_id: &str) -> Option<String> {
     match format {
         SessionFormat::Codex => Some(format!("codex resume {session_id}")),
         SessionFormat::Claude => Some(format!("claude -r {session_id}")),
+        SessionFormat::Droid => Some(format!("droid -r {session_id}")),
         SessionFormat::Ir => None,
     }
 }
@@ -272,7 +278,7 @@ fn maybe_open_session(
 
     if wrote_standalone_jsonl {
         bail!(
-            "automatic open requires writing into a native Codex/Claude home directory, not a standalone .jsonl file; pass --no-open to keep the conversion only"
+            "automatic open requires writing into a native Codex/Claude/Droid home directory, not a standalone .jsonl file; pass --no-open to keep the conversion only"
         );
     }
 
@@ -318,6 +324,11 @@ fn resume_command(
             cmd.arg("-r").arg(session_id);
             cmd
         }
+        SessionFormat::Droid => {
+            let mut cmd = ProcessCommand::new(droid_binary());
+            cmd.arg("-r").arg(session_id);
+            cmd
+        }
         SessionFormat::Ir => bail!("cannot open IR directly"),
     };
 
@@ -333,6 +344,10 @@ fn resume_command(
         SessionFormat::Claude => {
             command.env("CLAUDE_CONFIG_DIR", output_root);
             command.env("CLAUDE_HOME", output_root);
+        }
+        SessionFormat::Droid => {
+            command.env("FACTORY_HOME", output_root);
+            command.env("DROID_HOME", output_root);
         }
         SessionFormat::Ir => {}
     }
@@ -352,10 +367,14 @@ fn claude_binary() -> String {
     std::env::var("TRANSESSION_CLAUDE_BIN").unwrap_or_else(|_| "claude".to_string())
 }
 
+fn droid_binary() -> String {
+    std::env::var("TRANSESSION_DROID_BIN").unwrap_or_else(|_| "droid".to_string())
+}
+
 fn prepare_runtime_home(format: SessionFormat, output_root: &Path) -> Result<()> {
     match format {
         SessionFormat::Codex => bootstrap_codex_auth(output_root),
-        SessionFormat::Claude | SessionFormat::Ir => Ok(()),
+        SessionFormat::Claude | SessionFormat::Droid | SessionFormat::Ir => Ok(()),
     }
 }
 

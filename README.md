@@ -1,17 +1,19 @@
 # transession
 
-`transession` translates interactive session history between Codex and Claude Code.
+`transession` translates interactive session history between Codex, Claude Code, and Droid CLI.
 
 The default workflow is direct native-to-native conversion by session id:
 
 ```bash
 transession --from claude --to codex <SESSION_ID>
 transession --from codex --to claude <SESSION_ID>
+transession --from droid --to claude <SESSION_ID>
+transession --from claude --to droid <SESSION_ID>
 ```
 
 By default, `transession`:
 
-- resolves the source session id from the local Claude or Codex store
+- resolves the source session id from the local Codex, Claude, or Droid store
 - creates a fresh target session id automatically
 - writes the translated session into the target tool's storage
 - immediately opens the translated session in the target agent
@@ -21,6 +23,7 @@ If you only want the translation and do not want to start the target agent yet:
 ```bash
 transession --from claude --to codex <SESSION_ID> --no-open
 transession --from codex --to claude <SESSION_ID> --no-open
+transession --from droid --to codex <SESSION_ID> --no-open
 ```
 
 ## Install
@@ -46,8 +49,10 @@ For development:
 ```bash
 git clone https://github.com/inmzhang/transession.git
 cd transession
-cargo build --release
+make build
 ```
+
+The development build target writes the CLI binary to `bin/transession`.
 
 ## Quick Start
 
@@ -63,20 +68,34 @@ Convert a Codex session into Claude and open the translated Claude session immed
 transession --from codex --to claude <CODEX_SESSION_ID>
 ```
 
+Convert a Droid session into Claude and open the translated Claude session immediately:
+
+```bash
+transession --from droid --to claude <DROID_SESSION_ID>
+```
+
+Convert a Claude or Codex session into Droid and open it immediately:
+
+```bash
+transession --from claude --to droid <CLAUDE_SESSION_ID>
+transession --from codex --to droid <CODEX_SESSION_ID>
+```
+
 If you want the translated session to be written somewhere else first, override the target root explicitly:
 
 ```bash
 transession --from claude --to codex <SESSION_ID> --output ./tmp/codex-home
 transession --from codex --to claude <SESSION_ID> --output ./tmp/claude-home
+transession --from claude --to droid <SESSION_ID> --output ./tmp/factory-home
 ```
 
-When opening after translation, `transession` launches the target CLI with the translated session id. For custom output roots, it sets `CODEX_HOME` for Codex and `CLAUDE_CONFIG_DIR` plus `CLAUDE_HOME` for Claude.
+When opening after translation, `transession` launches the target CLI with the translated session id. For custom output roots, it sets `CODEX_HOME` for Codex, `CLAUDE_CONFIG_DIR` plus `CLAUDE_HOME` for Claude, and `FACTORY_HOME` plus `DROID_HOME` for Droid.
 
 For Codex custom output roots, `transession` also links the installed `auth.json` into the target home when needed so the launched Codex process can authenticate immediately.
 
 ## Session Lookup
 
-For Codex and Claude inputs, `transession` accepts either:
+For Codex, Claude, and Droid inputs, `transession` accepts either:
 
 - a native session id
 - a direct session file path
@@ -85,8 +104,9 @@ By default it searches:
 
 - Codex: `TRANSESSION_CODEX_HOME`, then `CODEX_HOME`, then `~/.codex`
 - Claude: `TRANSESSION_CLAUDE_HOME`, then `CLAUDE_CONFIG_DIR`, then `CLAUDE_HOME`, then `~/.claude`
+- Droid: `TRANSESSION_DROID_HOME`, then `DROID_HOME`, then `FACTORY_HOME`, then `~/.factory`
 
-That means you can usually use the same id you would pass to `codex resume` or `claude -r`.
+That means you can usually use the same id you would pass to `codex resume`, `claude -r`, or `droid -r`.
 
 ## What Gets Preserved
 
@@ -110,11 +130,31 @@ Known omissions:
 - opaque reasoning payloads and token-accounting side data
 - Codex SQLite state and shell snapshot sidecars
 - Claude subagent trees and tool-result sidecar directories
+- Droid runtime caches outside the session JSONL and settings sidecar
 - platform-specific runtime caches outside the main session log
 
 ## Development
 
-Local development checks:
+Local development uses the Makefile:
+
+```bash
+make build
+make run ARGS="--from claude --to droid <SESSION_ID> --no-open"
+make fmt
+make clippy
+make test
+make check
+```
+
+Useful targets:
+
+- `make build` builds the release binary and writes it to `bin/transession`
+- `make run ARGS="..."` builds and runs `bin/transession`
+- `make test-one TEST=<test_name>` runs one integration test from `tests/roundtrip.rs`
+- `make publish-dry-run` runs `cargo publish --dry-run --locked`
+- `make clean` removes Cargo build output and `bin/`
+
+The underlying local checks are:
 
 ```bash
 cargo fmt --all --check
@@ -176,9 +216,12 @@ Advanced commands remain available:
 
 ```bash
 transession inspect <SESSION_ID> --from claude
+transession inspect <SESSION_ID> --from droid
 transession import <SESSION_ID> ./session.json --from codex
+transession import <SESSION_ID> ./session.json --from droid
 transession export ./session.json ./out/codex-home --to codex --new-session-id
-transession convert <SESSION_ID> ./out/claude-home --from codex --to claude --new-session-id
+transession export ./session.json ./out/factory-home --to droid --new-session-id
+transession convert <SESSION_ID> ./out/claude-home --from droid --to claude --new-session-id
 ```
 
 ## AI Disclaimer

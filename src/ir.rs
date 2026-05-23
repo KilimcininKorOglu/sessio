@@ -12,6 +12,7 @@ pub enum SessionFormat {
     Ir,
     Codex,
     Claude,
+    Droid,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
@@ -20,6 +21,7 @@ pub enum SourceFormat {
     Ir,
     Codex,
     Claude,
+    Droid,
 }
 
 impl SourceFormat {
@@ -29,6 +31,7 @@ impl SourceFormat {
             Self::Ir => Some(SessionFormat::Ir),
             Self::Codex => Some(SessionFormat::Codex),
             Self::Claude => Some(SessionFormat::Claude),
+            Self::Droid => Some(SessionFormat::Droid),
         }
     }
 }
