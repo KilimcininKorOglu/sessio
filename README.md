@@ -28,11 +28,7 @@ transession --from droid --to codex <SESSION_ID> --no-open
 
 ## Install
 
-```bash
-cargo install transession
-```
-
-Or install directly from GitHub:
+Install directly from GitHub:
 
 ```bash
 cargo install --git https://github.com/KilimcininKorOglu/transession.git
@@ -42,6 +38,12 @@ Or from a local checkout:
 
 ```bash
 cargo install --path .
+```
+
+After the crate is published on crates.io, the standard Cargo install command will be:
+
+```bash
+cargo install transession
 ```
 
 For development:
