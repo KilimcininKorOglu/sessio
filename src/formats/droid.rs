@@ -303,7 +303,7 @@ pub fn write(session: &UniversalSession, output: &Path) -> Result<PathBuf> {
             "id": session_id,
             "title": title,
             "sessionTitle": title,
-            "owner": "transession",
+            "owner": "sessio",
             "version": 2,
             "cwd": cwd.display().to_string(),
         }),
@@ -467,7 +467,7 @@ fn encode_message_blocks(blocks: &[ContentBlock], role: &str) -> Value {
     }
 
     let prefix = if role == "developer" {
-        Some("[transession imported developer message]\n\n")
+        Some("[sessio imported developer message]\n\n")
     } else {
         None
     };

@@ -1,4 +1,4 @@
-PACKAGE := transession
+PACKAGE := sessio
 BIN_DIR := bin
 RELEASE_BIN := target/release/$(PACKAGE)
 BIN := $(BIN_DIR)/$(PACKAGE)

@@ -44,7 +44,7 @@ pub struct UniversalSession {
 }
 
 impl UniversalSession {
-    pub const CURRENT_IR_VERSION: &str = "transession/v1";
+    pub const CURRENT_IR_VERSION: &str = "sessio/v1";
 
     pub fn new(session_id: String) -> Self {
         Self {

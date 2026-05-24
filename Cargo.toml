@@ -1,14 +1,14 @@
 [package]
-name = "transession"
+name = "sessio"
 version = "0.1.2"
 edition = "2024"
 rust-version = "1.87"
-description = "Translate interactive session history between Codex, Claude Code, and a portable IR"
+description = "Sessio translates interactive session history between Codex, Claude Code, Droid CLI, and a portable IR"
 license = "MIT"
-repository = "https://github.com/KilimcininKorOglu/transession"
-homepage = "https://github.com/KilimcininKorOglu/transession"
+repository = "https://github.com/KilimcininKorOglu/sessio"
+homepage = "https://github.com/KilimcininKorOglu/sessio"
 readme = "README.md"
-keywords = ["ai", "cli", "session", "codex", "claude"]
+keywords = ["ai", "session", "codex", "claude", "droid"]
 categories = ["command-line-utilities", "development-tools"]
 
 [dependencies]

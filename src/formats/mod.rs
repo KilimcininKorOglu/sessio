@@ -262,30 +262,38 @@ fn resolve_droid_session_id(session_id: &str) -> Result<PathBuf> {
 }
 
 fn codex_root() -> Result<PathBuf> {
-    discover_root("TRANSESSION_CODEX_HOME", &["CODEX_HOME"], ".codex")
+    discover_root(
+        &["SESSIO_CODEX_HOME", "TRANSESSION_CODEX_HOME", "CODEX_HOME"],
+        ".codex",
+    )
 }
 
 fn claude_root() -> Result<PathBuf> {
     discover_root(
-        "TRANSESSION_CLAUDE_HOME",
-        &["CLAUDE_CONFIG_DIR", "CLAUDE_HOME"],
+        &[
+            "SESSIO_CLAUDE_HOME",
+            "TRANSESSION_CLAUDE_HOME",
+            "CLAUDE_CONFIG_DIR",
+            "CLAUDE_HOME",
+        ],
         ".claude",
     )
 }
 
 fn droid_root() -> Result<PathBuf> {
     discover_root(
-        "TRANSESSION_DROID_HOME",
-        &["DROID_HOME", "FACTORY_HOME"],
+        &[
+            "SESSIO_DROID_HOME",
+            "TRANSESSION_DROID_HOME",
+            "DROID_HOME",
+            "FACTORY_HOME",
+        ],
         ".factory",
     )
 }
 
-fn discover_root(primary_env: &str, secondary_envs: &[&str], suffix: &str) -> Result<PathBuf> {
-    if let Some(path) = env_path(primary_env) {
-        return Ok(path);
-    }
-    for env_name in secondary_envs {
+fn discover_root(env_names: &[&str], suffix: &str) -> Result<PathBuf> {
+    for env_name in env_names {
         if let Some(path) = env_path(env_name) {
             return Ok(path);
         }

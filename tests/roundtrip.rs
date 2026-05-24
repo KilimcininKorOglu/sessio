@@ -3,12 +3,12 @@ use std::os::unix::fs::PermissionsExt;
 use std::process::Command;
 
 use rusqlite::Connection;
-use tempfile::tempdir;
-use transession::formats::{detect_format, load_session, materialize};
-use transession::ir::{
+use sessio::formats::{detect_format, load_session, materialize};
+use sessio::ir::{
     ContentBlock, MessageEvent, ReasoningEvent, SessionEvent, SessionFormat, SourceFormat,
     UniversalSession,
 };
+use tempfile::tempdir;
 
 fn fixture(name: &str) -> std::path::PathBuf {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -140,7 +140,7 @@ fn detects_and_imports_droid_fixture() {
     );
     assert_eq!(
         session.metadata.cwd.as_deref(),
-        Some(std::path::Path::new("/tmp/transession-droid"))
+        Some(std::path::Path::new("/tmp/sessio-droid"))
     );
     assert!(
         session
@@ -430,7 +430,7 @@ fn writes_ir_json() {
     let output = temp.path().join("session.json");
     let path = materialize(&session, SessionFormat::Ir, &output).unwrap();
     let text = fs::read_to_string(path).unwrap();
-    assert!(text.contains("\"ir_version\": \"transession/v1\""));
+    assert!(text.contains("\"ir_version\": \"sessio/v1\""));
 }
 
 #[test]
@@ -440,7 +440,7 @@ fn auto_detects_pretty_printed_ir() {
     fs::write(
         &input,
         r#"{
-  "ir_version": "transession/v1",
+  "ir_version": "sessio/v1",
   "metadata": {
     "session_id": "test-session"
   },
@@ -471,16 +471,16 @@ fn projects_codex_developer_messages_into_claude() {
     let temp = tempdir().unwrap();
     let path = materialize(&session, SessionFormat::Claude, temp.path()).unwrap();
     let text = fs::read_to_string(path).unwrap();
-    assert!(text.contains("[transession imported developer message]"));
+    assert!(text.contains("[sessio imported developer message]"));
 }
 
 #[test]
-fn resolves_codex_session_ids_from_default_store_roots() {
+fn resolves_codex_session_ids_from_legacy_store_root_alias() {
     let session = load_session(&fixture("codex_sample.jsonl"), SourceFormat::Codex).unwrap();
     let temp = tempdir().unwrap();
     materialize(&session, SessionFormat::Codex, temp.path()).unwrap();
 
-    let output = Command::new(env!("CARGO_BIN_EXE_transession"))
+    let output = Command::new(env!("CARGO_BIN_EXE_sessio"))
         .arg("inspect")
         .arg("019cd6bd-10df-7e61-8506-e9ac5bdf4e6e")
         .arg("--from")
@@ -501,13 +501,13 @@ fn resolves_claude_session_ids_from_default_store_roots() {
     let temp = tempdir().unwrap();
     materialize(&session, SessionFormat::Claude, temp.path()).unwrap();
 
-    let output = Command::new(env!("CARGO_BIN_EXE_transession"))
+    let output = Command::new(env!("CARGO_BIN_EXE_sessio"))
         .arg("inspect")
         .arg("d89e26cd-11f2-47e8-bea5-a73ad5458483")
         .arg("--from")
         .arg("claude")
         .arg("--json")
-        .env("TRANSESSION_CLAUDE_HOME", temp.path())
+        .env("SESSIO_CLAUDE_HOME", temp.path())
         .output()
         .unwrap();
 
@@ -522,13 +522,13 @@ fn resolves_claude_session_ids_from_claude_config_dir_root() {
     let temp = tempdir().unwrap();
     materialize(&session, SessionFormat::Claude, temp.path()).unwrap();
 
-    let output = Command::new(env!("CARGO_BIN_EXE_transession"))
+    let output = Command::new(env!("CARGO_BIN_EXE_sessio"))
         .arg("inspect")
         .arg("d89e26cd-11f2-47e8-bea5-a73ad5458483")
         .arg("--from")
         .arg("claude")
         .arg("--json")
-        .env_remove("TRANSESSION_CLAUDE_HOME")
+        .env_remove("SESSIO_CLAUDE_HOME")
         .env_remove("CLAUDE_HOME")
         .env("CLAUDE_CONFIG_DIR", temp.path())
         .output()
@@ -545,13 +545,13 @@ fn resolves_droid_session_ids_from_default_store_roots() {
     let temp = tempdir().unwrap();
     materialize(&session, SessionFormat::Droid, temp.path()).unwrap();
 
-    let output = Command::new(env!("CARGO_BIN_EXE_transession"))
+    let output = Command::new(env!("CARGO_BIN_EXE_sessio"))
         .arg("inspect")
         .arg("11111111-1111-4111-8111-111111111111")
         .arg("--from")
         .arg("droid")
         .arg("--json")
-        .env("TRANSESSION_DROID_HOME", temp.path())
+        .env("SESSIO_DROID_HOME", temp.path())
         .output()
         .unwrap();
 
@@ -568,15 +568,15 @@ fn quick_cli_converts_by_session_id_and_prints_resume_hint() {
     let target_home = tempdir().unwrap();
     materialize(&source_session, SessionFormat::Claude, source_home.path()).unwrap();
 
-    let output = Command::new(env!("CARGO_BIN_EXE_transession"))
+    let output = Command::new(env!("CARGO_BIN_EXE_sessio"))
         .arg("--from")
         .arg("claude")
         .arg("--to")
         .arg("codex")
         .arg("d89e26cd-11f2-47e8-bea5-a73ad5458483")
         .arg("--no-open")
-        .env("TRANSESSION_CLAUDE_HOME", source_home.path())
-        .env("TRANSESSION_CODEX_HOME", target_home.path())
+        .env("SESSIO_CLAUDE_HOME", source_home.path())
+        .env("SESSIO_CODEX_HOME", target_home.path())
         .output()
         .unwrap();
 
@@ -611,7 +611,7 @@ fn quick_cli_opens_droid_target_by_default() {
     permissions.set_mode(0o755);
     fs::set_permissions(&script_path, permissions).unwrap();
 
-    let output = Command::new(env!("CARGO_BIN_EXE_transession"))
+    let output = Command::new(env!("CARGO_BIN_EXE_sessio"))
         .arg("--from")
         .arg("claude")
         .arg("--to")
@@ -620,8 +620,8 @@ fn quick_cli_opens_droid_target_by_default() {
         .arg("d89e26cd-11f2-47e8-bea5-a73ad5458483")
         .arg("--output")
         .arg(target_home.path())
-        .env("TRANSESSION_CLAUDE_HOME", source_home.path())
-        .env("TRANSESSION_DROID_BIN", &script_path)
+        .env("SESSIO_CLAUDE_HOME", source_home.path())
+        .env("SESSIO_DROID_BIN", &script_path)
         .output()
         .unwrap();
 
@@ -658,7 +658,7 @@ fn quick_cli_opens_claude_target_by_default() {
     permissions.set_mode(0o755);
     fs::set_permissions(&script_path, permissions).unwrap();
 
-    let output = Command::new(env!("CARGO_BIN_EXE_transession"))
+    let output = Command::new(env!("CARGO_BIN_EXE_sessio"))
         .arg("--from")
         .arg("codex")
         .arg("--to")
@@ -667,8 +667,8 @@ fn quick_cli_opens_claude_target_by_default() {
         .arg("019cd6bd-10df-7e61-8506-e9ac5bdf4e6e")
         .arg("--output")
         .arg(target_home.path())
-        .env("TRANSESSION_CODEX_HOME", source_home.path())
-        .env("TRANSESSION_CLAUDE_BIN", &script_path)
+        .env("SESSIO_CODEX_HOME", source_home.path())
+        .env("SESSIO_CLAUDE_BIN", &script_path)
         .output()
         .unwrap();
 
@@ -710,7 +710,7 @@ fn quick_cli_opens_codex_target_by_default_bootstraps_auth() {
     permissions.set_mode(0o755);
     fs::set_permissions(&script_path, permissions).unwrap();
 
-    let output = Command::new(env!("CARGO_BIN_EXE_transession"))
+    let output = Command::new(env!("CARGO_BIN_EXE_sessio"))
         .arg("--from")
         .arg("claude")
         .arg("--to")
@@ -719,9 +719,9 @@ fn quick_cli_opens_codex_target_by_default_bootstraps_auth() {
         .arg("d89e26cd-11f2-47e8-bea5-a73ad5458483")
         .arg("--output")
         .arg(target_home.path())
-        .env("TRANSESSION_CLAUDE_HOME", source_home.path())
+        .env("SESSIO_CLAUDE_HOME", source_home.path())
         .env("CODEX_HOME", installed_home.path())
-        .env("TRANSESSION_CODEX_BIN", &script_path)
+        .env("SESSIO_CODEX_BIN", &script_path)
         .output()
         .unwrap();
 
@@ -755,7 +755,7 @@ fn quick_cli_opens_target_agent_by_default() {
     permissions.set_mode(0o755);
     fs::set_permissions(&script_path, permissions).unwrap();
 
-    let output = Command::new(env!("CARGO_BIN_EXE_transession"))
+    let output = Command::new(env!("CARGO_BIN_EXE_sessio"))
         .arg("--from")
         .arg("claude")
         .arg("--to")
@@ -763,8 +763,8 @@ fn quick_cli_opens_target_agent_by_default() {
         .arg("d89e26cd-11f2-47e8-bea5-a73ad5458483")
         .arg("--output")
         .arg(target_home.path())
-        .env("TRANSESSION_CLAUDE_HOME", source_home.path())
-        .env("TRANSESSION_CODEX_BIN", &script_path)
+        .env("SESSIO_CLAUDE_HOME", source_home.path())
+        .env("SESSIO_CODEX_BIN", &script_path)
         .output()
         .unwrap();
 
@@ -780,15 +780,15 @@ fn bulk_cli_dry_run_converts_all_claude_sessions_without_real_write() {
     let target_home = tempdir().unwrap();
     write_bulk_fixtures(source_home.path(), SessionFormat::Claude);
 
-    let output = Command::new(env!("CARGO_BIN_EXE_transession"))
+    let output = Command::new(env!("CARGO_BIN_EXE_sessio"))
         .arg("bulk")
         .arg("--from")
         .arg("claude")
         .arg("--to")
         .arg("droid")
         .arg("--dry-run")
-        .env("TRANSESSION_CLAUDE_HOME", source_home.path())
-        .env("TRANSESSION_DROID_HOME", target_home.path())
+        .env("SESSIO_CLAUDE_HOME", source_home.path())
+        .env("SESSIO_DROID_HOME", target_home.path())
         .output()
         .unwrap();
 
@@ -806,15 +806,15 @@ fn bulk_cli_apply_writes_all_droid_sessions_after_temp_validation() {
     let target_home = tempdir().unwrap();
     write_bulk_fixtures(source_home.path(), SessionFormat::Claude);
 
-    let output = Command::new(env!("CARGO_BIN_EXE_transession"))
+    let output = Command::new(env!("CARGO_BIN_EXE_sessio"))
         .arg("bulk")
         .arg("--from")
         .arg("claude")
         .arg("--to")
         .arg("droid")
         .arg("--apply")
-        .env("TRANSESSION_CLAUDE_HOME", source_home.path())
-        .env("TRANSESSION_DROID_HOME", target_home.path())
+        .env("SESSIO_CLAUDE_HOME", source_home.path())
+        .env("SESSIO_DROID_HOME", target_home.path())
         .output()
         .unwrap();
 
@@ -835,28 +835,28 @@ fn bulk_cli_apply_refuses_existing_droid_targets() {
     let target_home = tempdir().unwrap();
     write_bulk_fixtures(source_home.path(), SessionFormat::Claude);
 
-    let first = Command::new(env!("CARGO_BIN_EXE_transession"))
+    let first = Command::new(env!("CARGO_BIN_EXE_sessio"))
         .arg("bulk")
         .arg("--from")
         .arg("claude")
         .arg("--to")
         .arg("droid")
         .arg("--apply")
-        .env("TRANSESSION_CLAUDE_HOME", source_home.path())
-        .env("TRANSESSION_DROID_HOME", target_home.path())
+        .env("SESSIO_CLAUDE_HOME", source_home.path())
+        .env("SESSIO_DROID_HOME", target_home.path())
         .output()
         .unwrap();
     assert!(first.status.success());
 
-    let second = Command::new(env!("CARGO_BIN_EXE_transession"))
+    let second = Command::new(env!("CARGO_BIN_EXE_sessio"))
         .arg("bulk")
         .arg("--from")
         .arg("claude")
         .arg("--to")
         .arg("droid")
         .arg("--apply")
-        .env("TRANSESSION_CLAUDE_HOME", source_home.path())
-        .env("TRANSESSION_DROID_HOME", target_home.path())
+        .env("SESSIO_CLAUDE_HOME", source_home.path())
+        .env("SESSIO_DROID_HOME", target_home.path())
         .output()
         .unwrap();
 
@@ -886,15 +886,15 @@ fn bulk_cli_apply_refuses_existing_droid_settings_sidecar() {
     fs::create_dir_all(target_settings.parent().unwrap()).unwrap();
     fs::write(&target_settings, "{}").unwrap();
 
-    let output = Command::new(env!("CARGO_BIN_EXE_transession"))
+    let output = Command::new(env!("CARGO_BIN_EXE_sessio"))
         .arg("bulk")
         .arg("--from")
         .arg("claude")
         .arg("--to")
         .arg("droid")
         .arg("--apply")
-        .env("TRANSESSION_CLAUDE_HOME", source_home.path())
-        .env("TRANSESSION_DROID_HOME", target_home.path())
+        .env("SESSIO_CLAUDE_HOME", source_home.path())
+        .env("SESSIO_DROID_HOME", target_home.path())
         .output()
         .unwrap();
 
@@ -908,7 +908,7 @@ fn bulk_cli_rejects_jsonl_output() {
     write_bulk_fixtures(source_home.path(), SessionFormat::Claude);
     let output = source_home.path().join("target.jsonl");
 
-    let result = Command::new(env!("CARGO_BIN_EXE_transession"))
+    let result = Command::new(env!("CARGO_BIN_EXE_sessio"))
         .arg("bulk")
         .arg("--from")
         .arg("claude")
@@ -917,7 +917,7 @@ fn bulk_cli_rejects_jsonl_output() {
         .arg("--apply")
         .arg("--output")
         .arg(&output)
-        .env("TRANSESSION_CLAUDE_HOME", source_home.path())
+        .env("SESSIO_CLAUDE_HOME", source_home.path())
         .output()
         .unwrap();
 
@@ -928,7 +928,7 @@ fn bulk_cli_rejects_jsonl_output() {
 
 #[test]
 fn bulk_cli_rejects_ir_and_same_format_requests() {
-    let ir = Command::new(env!("CARGO_BIN_EXE_transession"))
+    let ir = Command::new(env!("CARGO_BIN_EXE_sessio"))
         .arg("bulk")
         .arg("--from")
         .arg("ir")
@@ -938,7 +938,7 @@ fn bulk_cli_rejects_ir_and_same_format_requests() {
         .unwrap();
     assert!(!ir.status.success());
 
-    let same = Command::new(env!("CARGO_BIN_EXE_transession"))
+    let same = Command::new(env!("CARGO_BIN_EXE_sessio"))
         .arg("bulk")
         .arg("--from")
         .arg("claude")
@@ -960,15 +960,15 @@ fn bulk_cli_fails_before_apply_when_source_contains_invalid_claude_jsonl() {
     fs::create_dir_all(&bad_dir).unwrap();
     fs::write(bad_dir.join("bad.jsonl"), "not json").unwrap();
 
-    let output = Command::new(env!("CARGO_BIN_EXE_transession"))
+    let output = Command::new(env!("CARGO_BIN_EXE_sessio"))
         .arg("bulk")
         .arg("--from")
         .arg("claude")
         .arg("--to")
         .arg("droid")
         .arg("--apply")
-        .env("TRANSESSION_CLAUDE_HOME", source_home.path())
-        .env("TRANSESSION_DROID_HOME", target_home.path())
+        .env("SESSIO_CLAUDE_HOME", source_home.path())
+        .env("SESSIO_DROID_HOME", target_home.path())
         .output()
         .unwrap();
 
@@ -982,15 +982,15 @@ fn bulk_cli_apply_converts_droid_sessions_to_claude() {
     let target_home = tempdir().unwrap();
     write_bulk_fixtures(source_home.path(), SessionFormat::Droid);
 
-    let output = Command::new(env!("CARGO_BIN_EXE_transession"))
+    let output = Command::new(env!("CARGO_BIN_EXE_sessio"))
         .arg("bulk")
         .arg("--from")
         .arg("droid")
         .arg("--to")
         .arg("claude")
         .arg("--apply")
-        .env("TRANSESSION_DROID_HOME", source_home.path())
-        .env("TRANSESSION_CLAUDE_HOME", target_home.path())
+        .env("SESSIO_DROID_HOME", source_home.path())
+        .env("SESSIO_CLAUDE_HOME", target_home.path())
         .output()
         .unwrap();
 
@@ -1008,15 +1008,15 @@ fn bulk_cli_apply_converts_claude_sessions_to_codex_with_existing_index() {
     write_bulk_fixtures(source_home.path(), SessionFormat::Claude);
     fs::write(target_home.path().join("session_index.jsonl"), "").unwrap();
 
-    let output = Command::new(env!("CARGO_BIN_EXE_transession"))
+    let output = Command::new(env!("CARGO_BIN_EXE_sessio"))
         .arg("bulk")
         .arg("--from")
         .arg("claude")
         .arg("--to")
         .arg("codex")
         .arg("--apply")
-        .env("TRANSESSION_CLAUDE_HOME", source_home.path())
-        .env("TRANSESSION_CODEX_HOME", target_home.path())
+        .env("SESSIO_CLAUDE_HOME", source_home.path())
+        .env("SESSIO_CODEX_HOME", target_home.path())
         .output()
         .unwrap();
 

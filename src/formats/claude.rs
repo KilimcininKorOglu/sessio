@@ -779,7 +779,7 @@ fn project_message_for_claude(message: &MessageEvent) -> (&'static str, Vec<Cont
         "user" => ("user", message.blocks.clone()),
         other => {
             let mut blocks = message.blocks.clone();
-            let prefix = format!("[transession imported {other} message]");
+            let prefix = format!("[sessio imported {other} message]");
             match blocks.first_mut() {
                 Some(block) if block.text.is_some() => {
                     let text = block.text.take().unwrap_or_default();

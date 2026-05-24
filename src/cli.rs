@@ -16,10 +16,10 @@ use crate::ir::{SessionEvent, SessionFormat, SourceFormat, UniversalSession};
 #[command(
     author,
     version,
-    about = "Translate session storage between Codex, Claude, and a universal IR",
+    about = "Translate session history between Codex, Claude Code, Droid CLI, and a portable IR",
     args_conflicts_with_subcommands = true,
     subcommand_negates_reqs = true,
-    after_help = "Quick usage:\n  transession --from claude --to codex <SESSION_ID>\n  transession --from codex --to droid <SESSION_ID>\n  transession --from droid --to claude <SESSION_ID>\n  transession --from claude --to codex <SESSION_ID> --no-open\n  transession bulk --from claude --to droid --dry-run\n\nAdvanced usage remains available through subcommands such as inspect/import/export/convert/bulk."
+    after_help = "Quick usage:\n  sessio --from claude --to codex <SESSION_ID>\n  sessio --from codex --to droid <SESSION_ID>\n  sessio --from droid --to claude <SESSION_ID>\n  sessio --from claude --to codex <SESSION_ID> --no-open\n  sessio bulk --from claude --to droid --dry-run\n\nAdvanced usage remains available through subcommands such as inspect/import/export/convert/bulk."
 )]
 struct Cli {
     #[command(subcommand)]
@@ -118,7 +118,7 @@ struct TempNativeHome {
 impl TempNativeHome {
     fn create(target: SessionFormat) -> Result<Self> {
         let path = std::env::temp_dir().join(format!(
-            "transession-bulk-{}-{}",
+            "sessio-bulk-{}-{}",
             format_name(target),
             Uuid::now_v7()
         ));
@@ -157,7 +157,7 @@ fn quick_convert(cli: Cli) -> Result<()> {
     let from = cli.from.unwrap_or(SourceFormat::Auto);
     let to = cli
         .to
-        .context("missing --to; example: transession --from claude --to codex <SESSION_ID>")?;
+        .context("missing --to; example: sessio --from claude --to codex <SESSION_ID>")?;
 
     let mut session = load_session(&input, from)
         .with_context(|| format!("failed to load source session {}", input.display()))?;
@@ -575,15 +575,21 @@ fn resume_command(
 }
 
 fn codex_binary() -> String {
-    std::env::var("TRANSESSION_CODEX_BIN").unwrap_or_else(|_| "codex".to_string())
+    env_var_with_legacy("SESSIO_CODEX_BIN", "TRANSESSION_CODEX_BIN", "codex")
 }
 
 fn claude_binary() -> String {
-    std::env::var("TRANSESSION_CLAUDE_BIN").unwrap_or_else(|_| "claude".to_string())
+    env_var_with_legacy("SESSIO_CLAUDE_BIN", "TRANSESSION_CLAUDE_BIN", "claude")
 }
 
 fn droid_binary() -> String {
-    std::env::var("TRANSESSION_DROID_BIN").unwrap_or_else(|_| "droid".to_string())
+    env_var_with_legacy("SESSIO_DROID_BIN", "TRANSESSION_DROID_BIN", "droid")
+}
+
+fn env_var_with_legacy(primary: &str, legacy: &str, default: &str) -> String {
+    std::env::var(primary)
+        .or_else(|_| std::env::var(legacy))
+        .unwrap_or_else(|_| default.to_string())
 }
 
 fn prepare_runtime_home(format: SessionFormat, output_root: &Path) -> Result<()> {

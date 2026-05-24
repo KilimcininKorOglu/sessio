@@ -375,7 +375,7 @@ pub fn write(session: &UniversalSession, output: &Path) -> Result<PathBuf> {
     session_meta_payload.insert(
         "originator".to_string(),
         extra_string(&session.metadata, "codex_originator")
-            .unwrap_or_else(|| "transession".to_string())
+            .unwrap_or_else(|| "sessio".to_string())
             .into(),
     );
     session_meta_payload.insert(
@@ -400,7 +400,7 @@ pub fn write(session: &UniversalSession, output: &Path) -> Result<PathBuf> {
         json!({
             "text": extra_string(&session.metadata, "codex_base_instructions").unwrap_or_else(|| {
                 format!(
-                    "Imported by transession from {} session {}.",
+                    "Imported by Sessio from {} session {}.",
                     session
                         .metadata
                         .source_format
