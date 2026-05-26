@@ -2,6 +2,7 @@ mod claude;
 mod codex;
 mod droid;
 
+use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -199,9 +200,15 @@ pub fn list_sessions(format: SessionFormat) -> Result<Vec<PathBuf>> {
         return Ok(Vec::new());
     }
 
-    let mut sessions = collect_in_tree(&root, |path| {
-        path.extension().and_then(|ext| ext.to_str()) == Some("jsonl")
-    })?;
+    let mut sessions = match format {
+        SessionFormat::Claude => collect_in_tree_with_prune(
+            &root,
+            |path| is_jsonl(path) && !is_claude_subagent_path(path),
+            |path| !is_claude_subagent_path(path),
+        )?,
+        SessionFormat::Codex | SessionFormat::Droid => collect_in_tree(&root, is_jsonl)?,
+        SessionFormat::Ir => unreachable!("IR bulk input is rejected before discovery"),
+    };
     sessions.sort();
     Ok(sessions)
 }
@@ -230,12 +237,16 @@ fn resolve_codex_session_id(session_id: &str) -> Result<PathBuf> {
 fn resolve_claude_session_id(session_id: &str) -> Result<PathBuf> {
     let root = claude_root()?;
     let projects_root = root.join("projects");
-    find_in_tree(&projects_root, |path| {
-        path.file_name()
-            .and_then(|name| name.to_str())
-            .map(|name| name == format!("{session_id}.jsonl"))
-            .unwrap_or(false)
-    })
+    find_in_tree_with_prune(
+        &projects_root,
+        |path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .map(|name| name == format!("{session_id}.jsonl"))
+                .unwrap_or(false)
+        },
+        |path| !is_claude_subagent_path(path),
+    )
     .with_context(|| {
         format!(
             "could not find Claude session {session_id} under {}",
@@ -310,7 +321,15 @@ fn find_in_tree<F>(root: &Path, predicate: F) -> Result<PathBuf>
 where
     F: Fn(&Path) -> bool + Copy,
 {
-    collect_in_tree(root, predicate)?
+    find_in_tree_with_prune(root, predicate, |_| true)
+}
+
+fn find_in_tree_with_prune<F, G>(root: &Path, predicate: F, should_descend: G) -> Result<PathBuf>
+where
+    F: Fn(&Path) -> bool + Copy,
+    G: Fn(&Path) -> bool + Copy,
+{
+    collect_in_tree_with_prune(root, predicate, should_descend)?
         .into_iter()
         .next()
         .with_context(|| format!("could not find a matching session under {}", root.display()))
@@ -319,6 +338,18 @@ where
 fn collect_in_tree<F>(root: &Path, predicate: F) -> Result<Vec<PathBuf>>
 where
     F: Fn(&Path) -> bool + Copy,
+{
+    collect_in_tree_with_prune(root, predicate, |_| true)
+}
+
+fn collect_in_tree_with_prune<F, G>(
+    root: &Path,
+    predicate: F,
+    should_descend: G,
+) -> Result<Vec<PathBuf>>
+where
+    F: Fn(&Path) -> bool + Copy,
+    G: Fn(&Path) -> bool + Copy,
 {
     let mut matches = Vec::new();
     let mut stack = vec![root.to_path_buf()];
@@ -331,7 +362,9 @@ where
                 entry.with_context(|| format!("failed to read entry in {}", dir.display()))?;
             let path = entry.path();
             if path.is_dir() {
-                stack.push(path);
+                if should_descend(&path) {
+                    stack.push(path);
+                }
             } else if predicate(&path) {
                 matches.push(path);
             }
@@ -339,4 +372,13 @@ where
     }
 
     Ok(matches)
+}
+
+fn is_jsonl(path: &Path) -> bool {
+    path.extension().and_then(|ext| ext.to_str()) == Some("jsonl")
+}
+
+fn is_claude_subagent_path(path: &Path) -> bool {
+    path.components()
+        .any(|component| component.as_os_str() == OsStr::new("subagents"))
 }

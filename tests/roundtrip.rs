@@ -801,6 +801,40 @@ fn bulk_cli_dry_run_converts_all_claude_sessions_without_real_write() {
 }
 
 #[test]
+fn bulk_cli_ignores_claude_subagent_jsonl_files() {
+    let source_home = tempdir().unwrap();
+    let target_home = tempdir().unwrap();
+    let session = load_session(&fixture("claude_sample.jsonl"), SourceFormat::Claude).unwrap();
+    let parent_path = materialize(&session, SessionFormat::Claude, source_home.path()).unwrap();
+    let subagents_dir = parent_path.with_extension("").join("subagents");
+    fs::create_dir_all(&subagents_dir).unwrap();
+    fs::write(
+        subagents_dir.join("agent-ignored.jsonl"),
+        fs::read(fixture("claude_sample.jsonl")).unwrap(),
+    )
+    .unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_sessio"))
+        .arg("bulk")
+        .arg("--from")
+        .arg("claude")
+        .arg("--to")
+        .arg("droid")
+        .arg("--dry-run")
+        .env("SESSIO_CLAUDE_HOME", source_home.path())
+        .env("SESSIO_DROID_HOME", target_home.path())
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("found claude sessions: 1"));
+    assert!(stdout.contains("validated droid sessions: 1"));
+    assert!(stdout.contains("dry run only"));
+    assert!(!target_home.path().join("sessions").exists());
+}
+
+#[test]
 fn bulk_cli_apply_writes_all_droid_sessions_after_temp_validation() {
     let source_home = tempdir().unwrap();
     let target_home = tempdir().unwrap();
